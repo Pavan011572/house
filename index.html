@@ -377,10 +377,22 @@ button {
   var fail = document.getElementById('fail');
   if (typeof THREE === 'undefined' || !THREE.OrbitControls) { fail.hidden = false; return; }
 
-  var renderer;
-  try {
-    renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-  } catch (e) {
+  var renderer = null;
+  var renderOptions = [
+    { antialias: true, powerPreference: "default" },
+    { antialias: false, powerPreference: "default", failIfMajorPerformanceCaveat: false },
+    { antialias: false, powerPreference: "low-power", failIfMajorPerformanceCaveat: false, precision: "mediump" }
+  ];
+  for (var ro = 0; ro < renderOptions.length; ro++) {
+    try {
+      var candidate = new THREE.WebGLRenderer(renderOptions[ro]);
+      if (candidate && candidate.getContext && candidate.getContext()) {
+        renderer = candidate;
+        break;
+      }
+    } catch (e) {}
+  }
+  if (!renderer) {
     fail.hidden = false;
     return;
   }
