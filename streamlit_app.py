@@ -10,29 +10,43 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Custom CSS to minimize Streamlit chrome/padding and maximize the 3D viewport
+# Force full viewport height/width and eliminate all Streamlit margins/scrolling
 st.markdown(
     """
     <style>
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
-        .block-container {
-            padding-top: 0rem !important;
-            padding-bottom: 0rem !important;
-            padding-left: 0.5rem !important;
-            padding-right: 0.5rem !important;
-            max-width: 100% !important;
+        /* Hide all Streamlit default UI elements */
+        #MainMenu, header, footer, [data-testid="stToolbar"], [data-testid="stDecoration"] {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
         }
+        
+        /* Remove body & container spacing */
+        html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainBlockContainer"], section.main {
+            overflow: hidden !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: 100vw !important;
+        }
+
+        /* Stretch the custom component iframe to 100% of the browser window */
         iframe {
-            border-radius: 8px;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            border: none !important;
+            z-index: 999999 !important;
         }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# Resolve path to HTML file
+# Load 3D model HTML
 base_dir = Path(__file__).resolve().parent
 html_file = base_dir / "index.html"
 if not html_file.exists():
@@ -41,5 +55,5 @@ if not html_file.exists():
 with open(html_file, "r", encoding="utf-8") as f:
     html_content = f.read()
 
-# Render the 3D viewer in an embedded container
-components.html(html_content, height=920, scrolling=True)
+# Render inside the full-screen iframe
+components.html(html_content, height=1000, scrolling=False)
