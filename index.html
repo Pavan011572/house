@@ -36,7 +36,7 @@
 html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--bg); color: var(--fg); font-family: var(--font-ui); }
 #app { position: relative; width: 100%; height: 100%; }
 #stage { position: absolute; inset: 0; touch-action: none; }
-#stage canvas { display: block; width: 100%; height: 100%; }
+#stage canvas { display: block; width: 100%; height: 100%; touch-action: none !important; user-select: none; -webkit-user-select: none; }
 
 .plaque, .dock {
   position: absolute;
@@ -284,7 +284,7 @@ button {
       </div>
     </div>
 
-    <div class="hint" id="hint">Drag to orbit · pinch to zoom · Click buttons below to switch perspectives</div>
+    <div class="hint" id="hint">1-finger or 2-finger drag to orbit · pinch to zoom · Click buttons below to switch perspectives</div>
 
     <div class="bar">
       <div class="views" role="group" aria-label="Camera view">
@@ -413,6 +413,104 @@ button {
   var controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
+  if (THREE.TOUCH) {
+    controls.touches = {
+      ONE: THREE.TOUCH.ROTATE,
+      TWO: THREE.TOUCH.DOLLY_ROTATE
+    };
+  }
+
+  /* Two-Finger (Double Finger) Orbit & Pinch-Zoom Controller */
+  function orbitCamera(deltaTheta, deltaPhi) {
+    var offset = new THREE.Vector3().subVectors(camera.position, controls.target);
+    var radius = offset.length();
+    var theta = Math.atan2(offset.x, offset.z);
+    var phi = Math.acos(Math.max(-1, Math.min(1, offset.y / radius)));
+
+    theta += deltaTheta;
+    phi = Math.max(0.04, Math.min(Math.PI * 0.492, phi + deltaPhi));
+
+    offset.x = radius * Math.sin(phi) * Math.sin(theta);
+    offset.y = radius * Math.cos(phi);
+    offset.z = radius * Math.sin(phi) * Math.cos(theta);
+
+    camera.position.copy(controls.target).add(offset);
+    camera.lookAt(controls.target);
+    controls.update();
+    userMoved = true;
+  }
+
+  var twoTouchData = null;
+  renderer.domElement.addEventListener('touchstart', function(e) {
+    if (state.view === 'inside' || anim) return;
+    if (e.touches.length === 2) {
+      var t1 = e.touches[0], t2 = e.touches[1];
+      var mx = (t1.clientX + t2.clientX) / 2;
+      var my = (t1.clientY + t2.clientY) / 2;
+      var dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      twoTouchData = { x: mx, y: my, dist: dist };
+    } else {
+      twoTouchData = null;
+    }
+  }, { passive: false });
+
+  renderer.domElement.addEventListener('touchmove', function(e) {
+    if (state.view === 'inside' || anim || !twoTouchData) return;
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      var t1 = e.touches[0], t2 = e.touches[1];
+      var mx = (t1.clientX + t2.clientX) / 2;
+      var my = (t1.clientY + t2.clientY) / 2;
+      var dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+
+      var dx = mx - twoTouchData.x;
+      var dy = my - twoTouchData.y;
+      var dDist = dist - twoTouchData.dist;
+
+      // Two-Finger Drag -> Orbit Camera smoothly in 3D
+      if (Math.hypot(dx, dy) > 1.0) {
+        var dTheta = -dx * 0.0075;
+        var dPhi = -dy * 0.0075;
+        orbitCamera(dTheta, dPhi);
+      }
+
+      // Pinch -> Zoom
+      if (Math.abs(dDist) > 2.0) {
+        var scale = 1 - dDist * 0.005;
+        scale = Math.max(0.9, Math.min(1.1, scale));
+        var offset = new THREE.Vector3().subVectors(camera.position, controls.target);
+        offset.multiplyScalar(scale);
+        if (offset.length() > 6 && offset.length() < 500) {
+          camera.position.copy(controls.target).add(offset);
+          controls.update();
+        }
+      }
+
+      twoTouchData.x = mx;
+      twoTouchData.y = my;
+      twoTouchData.dist = dist;
+    }
+  }, { passive: false });
+
+  renderer.domElement.addEventListener('touchend', function(e) {
+    if (e.touches.length < 2) twoTouchData = null;
+  });
+  renderer.domElement.addEventListener('touchcancel', function() {
+    twoTouchData = null;
+  });
+
+  // Trackpad / Touchpad two-finger swipe orbit (horizontal deltaX or vertical swipe)
+  renderer.domElement.addEventListener('wheel', function(e) {
+    if (state.view === 'inside' || anim) return;
+    if (!e.ctrlKey) {
+      if (Math.abs(e.deltaX) > 1.2) {
+        orbitCamera(-e.deltaX * 0.003, 0);
+      }
+      if (e.shiftKey && Math.abs(e.deltaY) > 1.2) {
+        orbitCamera(0, -e.deltaY * 0.003);
+      }
+    }
+  }, { passive: true });
 
   /* ---------- PROCEDURAL TEXTURES (Rich, photorealistic materials without external asset latency) ---------- */
   function createStackedStoneCanvas() {
